@@ -1,41 +1,51 @@
 import express from 'express';
 import cors from 'cors';
-import { spawn } from 'child_process';
+import fetch from 'node-fetch'; // Tambahkan ini
 
 const app = express();
-app.use(cors());
+
+app.use(cors({
+    origin: 'http://localhost:5173', // Frontend URL
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
 app.post('/chat', async(req, res) => {
     const { message } = req.body;
+    console.log('Received message:', message);
 
     try {
-        const ollama = spawn('ollama', ['run', 'deepseek-r1:1.5b', message]);
-
-        let response = '';
-
-        ollama.stdout.on('data', (data) => {
-            response += data.toString();
+        const ollamaResponse = await fetch('http://localhost:11434/api/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'deepseek-r1:1.5b',
+                prompt: message,
+                stream: false
+            }),
         });
 
-        ollama.stderr.on('data', (data) => {
-            console.error(`Error: ${data}`);
-        });
+        if (!ollamaResponse.ok) {
+            throw new Error(`Ollama error: ${ollamaResponse.statusText}`);
+        }
 
-        ollama.on('close', (code) => {
-            if (code !== 0) {
-                res.status(500).json({ error: 'Failed to get response from Ollama' });
-            } else {
-                res.json({ response });
-            }
-        });
+        const data = await ollamaResponse.json();
+        res.json({ response: data.response });
+
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Server error:', error);
+        res.status(500).json({
+            error: 'Failed to get response from Ollama',
+            details: error.message
+        });
     }
 });
 
 const PORT = 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running at http://localhost:${PORT}`);
 });
