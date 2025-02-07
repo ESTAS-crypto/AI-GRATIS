@@ -1,101 +1,334 @@
-import { useState } from 'react'
-import '../assets/styles/Chat.css'
+import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import DOMPurify from 'dompurify';
+import '../assets/styles/chat.css';
 
 function Chat() {
-  const [input, setInput] = useState('')
-  const [messages, setMessages] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
+    // Core states
+    const [input, setInput] = useState('');
+    const [messages, setMessages] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    
+    // UI states
+    const [darkMode, setDarkMode] = useState(() => {
+        const saved = localStorage.getItem('darkMode');
+        return saved ? JSON.parse(saved) : false;
+    });
+    const [showSettings, setShowSettings] = useState(false);
+    const [fontSize, setFontSize] = useState('medium');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!input.trim()) return
+    // Enhanced features states
+    const [sessionId] = useState(() => Date.now().toString());
+    const [templates, setTemplates] = useState(() => {
+        const saved = localStorage.getItem('chatTemplates');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [copiedMessageId, setCopiedMessageId] = useState(null);
 
-    setIsLoading(true)
-    const userMessage = input
-    setInput('')
+    // Refs
+    const messagesEndRef = useRef(null);
+    const inputRef = useRef(null);
 
-    // Tambah pesan user
-    setMessages(prev => [...prev, {
-      role: 'user',
-      content: userMessage
-    }])
+    // Load chat history
+    useEffect(() => {
+        const savedMessages = localStorage.getItem('chatHistory');
+        if (savedMessages) {
+            setMessages(JSON.parse(savedMessages));
+        }
+    }, []);
 
-    try {
-      console.log('Sending request to server...')
-      const response = await fetch('http://localhost:3000/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: userMessage })
-      })
+    // Save messages to localStorage
+    useEffect(() => {
+        localStorage.setItem('chatHistory', JSON.stringify(messages));
+    }, [messages]);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+    // Handle dark mode
+    useEffect(() => {
+        localStorage.setItem('darkMode', JSON.stringify(darkMode));
+        if (darkMode) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    }, [darkMode]);
 
-      const data = await response.json()
-      
-      if (data.error) {
-        throw new Error(data.error)
-      }
+    // Auto scroll to bottom
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
-      // Tambah respons AI
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.response
-      }])
-    } catch (error) {
-      console.error('Error:', error)
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${error.message}`
-      }])
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
 
-  return (
-    <div className="chat-container">
-      <div className="messages-container">
-        <div className="chat-messages">
-          {messages.map((message, index) => (
-            <div key={index} className={`message ${message.role}`}>
-              <div className="message-content">
-                {message.content}
-              </div>
+    // Copy function
+    const copyToClipboard = async (text, messageId) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedMessageId(messageId);
+            setTimeout(() => {
+                setCopiedMessageId(null);
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+    };
+
+    // Message handling
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!input.trim()) return;
+
+        const userMessage = input.trim();
+        setInput('');
+        
+        addMessage('user', userMessage);
+
+        try {
+            setIsLoading(true);
+            const response = await sendMessage(userMessage);
+            addMessage('assistant', response);
+        } catch (error) {
+            console.error('Error:', error);
+            addMessage('assistant', `Error: ${error.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const addMessage = (role, content) => {
+        setMessages(prev => [...prev, {
+            role,
+            content,
+            timestamp: new Date().toISOString(),
+            id: Date.now()
+        }]);
+    };
+
+    const sendMessage = async (message) => {
+        const response = await fetch('http://localhost:3000/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                message,
+                sessionId 
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response;
+    };
+
+    // Template management
+    const saveTemplate = (name, content) => {
+        const newTemplate = { id: Date.now(), name, content };
+        setTemplates(prev => [...prev, newTemplate]);
+        localStorage.setItem('chatTemplates', JSON.stringify([...templates, newTemplate]));
+    };
+
+    // Utility functions
+    const clearChat = () => {
+        if (window.confirm('Anda yakin ingin menghapus riwayat chat?')) {
+            setMessages([]);
+            localStorage.removeItem('chatHistory');
+        }
+    };
+
+    const exportChat = () => {
+        const chatHistory = messages
+            .map(msg => `${msg.role} (${new Date(msg.timestamp).toLocaleString()}): ${msg.content}`)
+            .join('\n\n');
+        
+        const blob = new Blob([chatHistory], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-history-${new Date().toISOString()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Filter messages
+    const filteredMessages = searchQuery
+        ? messages.filter(message => 
+            message.content.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : messages;
+
+    // Markdown renderer
+    const customRenderers = {
+        code({node, inline, className, children, ...props}) {
+            const match = /language-(\w+)/.exec(className || '');
+            return !inline && match ? (
+                <SyntaxHighlighter
+                    style={vscDarkPlus}
+                    language={match[1]}
+                    PreTag="div"
+                    {...props}
+                >
+                    {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+            ) : (
+                <code className={className} {...props}>
+                    {children}
+                </code>
+            );
+        }
+    };
+
+    return (
+        <div className={`app-container ${darkMode ? 'dark-mode' : ''} font-${fontSize}`}>
+            <div className="chat-container">
+                {/* Header */}
+                <header className="chat-header">
+                    <div className="header-content">
+                        <h1>AI Assistant</h1>
+                        <div className="header-actions">
+                            <button 
+                                className="icon-button"
+                                onClick={() => setShowSettings(!showSettings)}
+                                title="Pengaturan"
+                            >
+                                ⚙️
+                            </button>
+                            <button
+                                className="icon-button"
+                                onClick={() => setDarkMode(!darkMode)}
+                                title="Ubah Tema"
+                            >
+                                {darkMode ? '☀️' : '🌙'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Search bar */}
+                    <div className="search-container">
+                        <input
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Cari pesan..."
+                            className="search-input"
+                        />
+                    </div>
+
+                    {/* Settings panel */}
+                    {showSettings && (
+                        <div className="settings-panel">
+                            <div className="settings-group">
+                                <button onClick={clearChat} className="settings-button">
+                                    Hapus Chat
+                                </button>
+                                <button onClick={exportChat} className="settings-button">
+                                    Ekspor Chat
+                                </button>
+                            </div>
+                            <div className="settings-group">
+                                <label>Ukuran Font:</label>
+                                <select 
+                                    value={fontSize} 
+                                    onChange={(e) => setFontSize(e.target.value)}
+                                    className="font-select"
+                                >
+                                    <option value="small">Kecil</option>
+                                    <option value="medium">Sedang</option>
+                                    <option value="large">Besar</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+                </header>
+
+                {/* Messages */}
+                <div className="messages-container">
+                    <div className="chat-messages">
+                        {filteredMessages.map((message) => (
+                            <div 
+                                key={message.id} 
+                                className={`message ${message.role}`}
+                            >
+                                <div className="message-bubble">
+                                    {message.role === 'assistant' && (
+                                        <div className="avatar">AI</div>
+                                    )}
+                                    <div className="message-content">
+                                        <ReactMarkdown 
+                                            components={customRenderers}
+                                            children={DOMPurify.sanitize(message.content)}
+                                        />
+                                        <div className="message-actions">
+                                            {message.role === 'assistant' && (
+                                                <button 
+                                                    onClick={() => copyToClipboard(message.content, message.id)}
+                                                    className="copy-button"
+                                                    title="Salin pesan"
+                                                >
+                                                    {copiedMessageId === message.id ? '✓' : '📋'}
+                                                </button>
+                                            )}
+                                            <span className="message-timestamp">
+                                                {new Date(message.timestamp).toLocaleTimeString()}
+                                            </span>
+                                        </div>
+                                        {copiedMessageId === message.id && (
+                                            <div className="copy-notification">
+                                                Teks berhasil disalin!
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        
+                        {isLoading && (
+                            <div className="message assistant">
+                                <div className="message-bubble">
+                                    <div className="avatar">AI</div>
+                                    <div className="typing-indicator">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+                </div>
+
+                {/* Input area */}
+                <div className="chat-input-container">
+                    <form onSubmit={handleSubmit} className="input-wrapper">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="Ketik pesan Anda di sini..."
+                            className="chat-input"
+                            disabled={isLoading}
+                        />
+                        <button 
+                            type="submit" 
+                            className="send-button"
+                            disabled={isLoading || !input.trim()}
+                        >
+                            <span className="button-text">
+                                {isLoading ? 'Mengirim...' : 'Kirim'}
+                            </span>
+                        </button>
+                    </form>
+                </div>
             </div>
-          ))}
-          {isLoading && (
-            <div className="message assistant">
-              <div className="message-content loading">
-                Thinking...
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="chat-input-container">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
-          className="chat-input"
-          disabled={isLoading}
-        />
-        <button 
-          type="submit" 
-          className="send-button"
-          disabled={isLoading || !input.trim()}
-        >
-          {isLoading ? 'Sending...' : 'Send'}
-        </button>
-      </form>
-    </div>
-  )
+    );
 }
 
-export default Chat
+export default Chat;
