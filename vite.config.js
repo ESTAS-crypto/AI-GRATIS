@@ -5,13 +5,8 @@ import path from 'path';
 export default defineConfig({
     plugins: [react()],
     resolve: {
-        alias: [
-            { find: '@', replacement: path.resolve(__dirname, 'src') },
-            { find: '@assets', replacement: path.resolve(__dirname, 'src/assets') },
-            { find: '@styles', replacement: path.resolve(__dirname, 'src/assets/styles') }
-        ]
+        alias: {
+            '@': path.resolve(__dirname, 'src'), // Sesuaikan jalur ini jika perlu  
+        },
     },
-    css: {
-        modules: true
-    }
 });
