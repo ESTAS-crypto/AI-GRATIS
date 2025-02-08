@@ -4,7 +4,7 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
-        "dev": "vite --host",
+        "dev": "vite",
         "build": "vite build",
         "preview": "vite preview",
         "clean": "rimraf dist node_modules/.vite"
@@ -35,5 +35,8 @@
         "eslint-plugin-react-refresh": "^0.4.16",
         "globals": "^15.14.0",
         "vite": "^6.1.0"
+    },
+    "engines": {
+        "node": ">=20.16.0"
     }
 }
