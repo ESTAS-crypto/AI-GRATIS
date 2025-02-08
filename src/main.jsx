@@ -1,11 +1,12 @@
+// src/main.jsx
 import React from 'react'
-import { createRoot } from 'react-dom/client'
-import "./index.css"
-import App from "./App.jsx"
-// Hapus baris import "./assets/styles/chat.jsx" karena tidak diperlukan
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
 
-createRoot(document.getElementById("root")).render(
+// Pastikan element dengan id="root" ada di index.html
+ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 )

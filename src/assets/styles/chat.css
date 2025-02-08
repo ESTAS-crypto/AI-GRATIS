@@ -563,3 +563,29 @@ body {
 .messages-container::-webkit-scrollbar-thumb:hover {
     background: var(--primary);
 }
+
+
+/* Tambahkan di chat.css */
+
+.notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    background-color: var(--success);
+    color: white;
+    border-radius: 4px;
+    animation: slideUp 0.3s ease-out;
+    z-index: 1000;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
